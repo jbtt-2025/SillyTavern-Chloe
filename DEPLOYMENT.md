@@ -77,18 +77,31 @@ oauth:
     clientSecret: 'YOUR_LINUXDO_CLIENT_SECRET'
 ```
 
-#### 4. 修改管理员凭据
+#### 4. 配置管理员凭据
 
-**重要**：编辑 `src/endpoints/admin.js` 修改管理员账号：
+**重要**：通过环境变量设置管理员账号（不要硬编码到代码中）：
 
-```javascript
-const ADMIN_CREDENTIALS = {
-    username: 'your_admin_username',
-    password: 'your_strong_password',
-};
+```bash
+# Linux/macOS
+export ADMIN_USERNAME="your_admin_username"
+export ADMIN_PASSWORD="your_strong_password"
+
+# Windows PowerShell
+$env:ADMIN_USERNAME="your_admin_username"
+$env:ADMIN_PASSWORD="your_strong_password"
 ```
 
-更好的做法是从环境变量读取（需要修改代码）。
+或创建 `.env` 文件：
+
+```env
+ADMIN_USERNAME=your_admin_username
+ADMIN_PASSWORD=your_strong_password
+```
+
+**注意**：
+- `.env` 文件已在 `.gitignore` 中，不会被提交到版本控制
+- 默认值为 `admin` / `changeme`，**必须在生产环境中修改**
+- 建议使用强密码（至少12位，包含大小写字母、数字和特殊字符）
 
 #### 5. 启动应用
 
@@ -132,6 +145,16 @@ services:
     command: npm start
     environment:
       - NODE_ENV=production
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-changeme}
+```
+
+**重要**：在宿主机上设置环境变量或使用 `.env` 文件：
+
+```bash
+# 在项目根目录创建 .env 文件
+ADMIN_USERNAME=your_admin_username
+ADMIN_PASSWORD=your_strong_password
 ```
 
 #### 3. 启动容器
