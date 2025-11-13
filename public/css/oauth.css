@@ -382,6 +382,18 @@ html {
     animation: blink 1.5s infinite;
 }
 
+.button-icon-svg {
+    flex-shrink: 0;
+    width: 20px;
+    height: 20px;
+    display: block;
+    transition: transform 0.2s ease;
+}
+
+.pixel-button:hover .button-icon-svg {
+    transform: scale(1.1);
+}
+
 .button-hover-effect {
     position: absolute;
     top: 0;
