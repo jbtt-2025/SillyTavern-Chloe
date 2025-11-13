@@ -203,6 +203,11 @@
                                 </span>
                             </button>
 
+                            <div id="checkinCooldownWrap" class="checkin-cooldown hidden">
+                                <span class="cooldown-label">冷却剩余</span>
+                                <span id="checkinCooldown" class="cooldown-value">--:--:--</span>
+                            </div>
+
                             <div class="checkin-tips">
                                 <div class="tip-item">
                                     <span class="tip-icon">▸</span>
@@ -325,7 +330,7 @@
                             <div class="leaderboard-tips">
                                 <div class="tip-item">
                                     <span class="tip-icon">▸</span>
-                                    <span>排行榜每小时更新一次</span>
+                                    <span>排行榜实时更新</span>
                                 </div>
                                 <div class="tip-item">
                                     <span class="tip-icon">▸</span>
@@ -399,6 +404,31 @@
                                     <span class="info-icon">◉</span>
                                     <span>开启操作：一次性扣除 1 积分（立即扣费）</span>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Account Security Card -->
+                <div class="pixel-card">
+                    <div class="card-header">
+                        <span class="card-icon">🔒</span>
+                        <span class="card-title">账户安全</span>
+                        <div class="scanline"></div>
+                    </div>
+                    <div class="card-body">
+                        <div class="settings-section">
+                            <div class="setting-item">
+                                <div class="setting-info">
+                                    <div class="setting-title">修改密码</div>
+                                    <div class="setting-desc">定期修改密码可以提高账户安全性</div>
+                                </div>
+                                <button id="changePasswordBtn" class="pixel-button small primary">
+                                    <span class="button-content">
+                                        <span class="button-icon">🔑</span>
+                                        <span class="button-text">修改密码</span>
+                                    </span>
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -572,6 +602,52 @@
 
     <!-- Toast Notification Container -->
     <div id="toastContainer" class="toast-container"></div>
+
+    <!-- Change Password Dialog -->
+    <div id="changePasswordDialog" class="dialog-overlay hidden">
+        <div class="pixel-dialog">
+            <div class="dialog-header">
+                <span class="dialog-icon">🔑</span>
+                <span class="dialog-title">修改密码</span>
+            </div>
+            <div class="dialog-body">
+                <div class="input-group" style="margin-bottom:12px;">
+                    <label class="input-label">
+                        <span class="label-icon">▸</span>
+                        <span>当前密码</span>
+                    </label>
+                    <input type="password" id="currentPassword" class="pixel-input" placeholder="请输入当前密码">
+                </div>
+                <div class="input-group" style="margin-bottom:12px;">
+                    <label class="input-label">
+                        <span class="label-icon">▸</span>
+                        <span>新密码</span>
+                    </label>
+                    <input type="password" id="newPassword" class="pixel-input" placeholder="6-128位，建议使用字母数字组合">
+                </div>
+                <div class="input-group" style="margin-bottom:12px;">
+                    <label class="input-label">
+                        <span class="label-icon">▸</span>
+                        <span>确认新密码</span>
+                    </label>
+                    <input type="password" id="confirmNewPassword" class="pixel-input" placeholder="再次输入新密码">
+                </div>
+                <div id="passwordError" class="error-message hidden" style="margin-bottom:10px;"></div>
+            </div>
+            <div class="dialog-footer">
+                <button id="passwordConfirm" class="pixel-button dialog-btn confirm-btn">
+                    <span class="button-content">
+                        <span class="button-text">确认修改</span>
+                    </span>
+                </button>
+                <button id="passwordCancel" class="pixel-button dialog-btn cancel-btn">
+                    <span class="button-content">
+                        <span class="button-text">取消</span>
+                    </span>
+                </button>
+            </div>
+        </div>
+    </div>
 
     <!-- Motion One (UMD) for animations -->
     <script src="https://cdn.jsdelivr.net/npm/motion@10.16.4/dist/motion.umd.js"></script>

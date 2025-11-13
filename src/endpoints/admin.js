@@ -9,13 +9,15 @@ import { sync as writeFileAtomicSync } from 'write-file-atomic';
 
 import { getUserDirectories, toKey, getPasswordHash } from '../users.js';
 
+// 从环境变量读取管理员凭据，避免硬编码
 const ADMIN_CREDENTIALS = {
-    username: 'admin',
-    password: '123456',
+    username: process.env.ADMIN_USERNAME || 'admin',
+    password: process.env.ADMIN_PASSWORD || 'changeme',
 };
 
 const ACCOUNT_PREFIX = 'account:';
 const REDEEM_CODE_PREFIX = 'redeem:';
+const INVITE_CODE_PREFIX = 'invite:';
 const SYSTEM_CONFIG_KEY = 'system:config';
 
 function toAccountKey(handle) {
@@ -24,6 +26,10 @@ function toAccountKey(handle) {
 
 function toRedeemCodeKey(code) {
     return `${REDEEM_CODE_PREFIX}${code.toUpperCase()}`;
+}
+
+function toInviteCodeKey(code) {
+    return `${INVITE_CODE_PREFIX}${code.toUpperCase()}`;
 }
 
 /**
@@ -419,6 +425,7 @@ router.get('/stats', async (req, res) => {
     try {
         const allUserKeys = await storage.keys(x => x.key.startsWith('user:'));
         const allCodeKeys = await storage.keys(x => x.key.startsWith(REDEEM_CODE_PREFIX));
+        const allInviteKeys = await storage.keys(x => x.key.startsWith(INVITE_CODE_PREFIX));
 
         let totalStorage = 0;
         let activeUsers = 0;
@@ -467,6 +474,14 @@ router.get('/stats', async (req, res) => {
                 used: usedCodes,
                 unused: unusedCodes,
             },
+            inviteCodes: {
+                total: allInviteKeys.length,
+                // count used invites
+                used: (await Promise.all(allInviteKeys.map(async (k) => {
+                    const c = await storage.getItem(k);
+                    return c?.used ? 1 : 0;
+                }))).reduce((a, b) => a + b, 0),
+            },
         });
     } catch (error) {
         console.error('Get stats error:', error);
@@ -506,5 +521,117 @@ router.post('/config', async (req, res) => {
     } catch (error) {
         console.error('Update config error:', error);
         return res.status(500).json({ error: '更新系统配置失败' });
+    }
+});
+
+// ──────────────────────────────────────────────────────────────
+// 邀请码管理
+// ──────────────────────────────────────────────────────────────
+
+/**
+ * @typedef {Object} InviteCode
+ * @property {string} code
+ * @property {boolean} used
+ * @property {string|null} usedBy
+ * @property {number} createdAt
+ * @property {number|null} usedAt
+ * @property {number|null} expiresAt - 过期时间戳，null表示永不过期
+ */
+
+// 批量创建邀请码
+router.post('/invite-codes', async (req, res) => {
+    try {
+        const { count = 1, expiresInDays } = req.body || {};
+
+        if (typeof count !== 'number' || count <= 0 || count > 200) {
+            return res.status(400).json({ error: '数量必须在 1-200 之间' });
+        }
+
+        // 验证过期天数
+        let expiresAt = null;
+        if (expiresInDays !== undefined && expiresInDays !== null) {
+            if (typeof expiresInDays !== 'number' || expiresInDays <= 0 || expiresInDays > 365) {
+                return res.status(400).json({ error: '过期天数必须在 1-365 之间' });
+            }
+            expiresAt = Date.now() + (expiresInDays * 24 * 60 * 60 * 1000);
+        }
+
+        const created = [];
+        for (let i = 0; i < count; i++) {
+            let code = generateRedeemCode(12);
+            let attempts = 0;
+            // 增加重试次数到50次，减少生成失败的可能性
+            while (await storage.getItem(toInviteCodeKey(code)) && attempts < 50) {
+                code = generateRedeemCode(12);
+                attempts++;
+            }
+
+            // 如果50次都失败了，返回错误
+            if (attempts >= 50) {
+                return res.status(500).json({ error: '生成邀请码失败，请稍后重试' });
+            }
+
+            /** @type {InviteCode} */
+            const invite = {
+                code,
+                used: false,
+                usedBy: null,
+                createdAt: Date.now(),
+                usedAt: null,
+                expiresAt,
+            };
+            await storage.setItem(toInviteCodeKey(code), invite);
+            created.push(invite);
+        }
+
+        return res.json({
+            success: true,
+            codes: created.map(c => ({
+                code: c.code,
+                createdAt: c.createdAt,
+                expiresAt: c.expiresAt,
+            })),
+            message: `成功创建 ${created.length} 个邀请码${expiresAt ? `，有效期 ${expiresInDays} 天` : ''}`,
+        });
+    } catch (error) {
+        console.error('Create invite codes error:', error);
+        return res.status(500).json({ error: '创建邀请码失败' });
+    }
+});
+
+// 获取所有邀请码
+router.get('/invite-codes', async (_req, res) => {
+    try {
+        const keys = await storage.keys(k => k.key.startsWith(INVITE_CODE_PREFIX));
+        const codes = [];
+        for (const key of keys) {
+            const data = await storage.getItem(key);
+            if (data) codes.push(data);
+        }
+        codes.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        return res.json({ codes });
+    } catch (error) {
+        console.error('Get invite codes error:', error);
+        return res.status(500).json({ error: '获取邀请码失败' });
+    }
+});
+
+// 删除未使用的邀请码
+router.delete('/invite-codes/:code', async (req, res) => {
+    try {
+        const { code } = req.params;
+        const key = toInviteCodeKey(code);
+        const data = await storage.getItem(key);
+        if (!data) {
+            return res.status(404).json({ error: '邀请码不存在' });
+        }
+        if (data.used) {
+            return res.status(400).json({ error: '邀请码已被使用，无法删除' });
+        }
+        await storage.removeItem(key);
+        return res.json({ success: true, message: '邀请码已删除' });
+    } catch (error) {
+        console.error('Delete invite code error:', error);
+        return res.status(500).json({ error: '删除邀请码失败' });
     }
 });

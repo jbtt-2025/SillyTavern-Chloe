@@ -4,9 +4,10 @@ import { promises as fsPromises } from 'node:fs';
 import express from 'express';
 import storage from 'node-persist';
 
-import { getUserDirectories, toKey } from '../users.js';
+import { getUserDirectories, toKey, getPasswordHash, getPasswordSalt } from '../users.js';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
+const COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24h cooldown for check-in
 const ACCOUNT_PREFIX = 'account:';
 const REDEEM_CODE_PREFIX = 'redeem:';
 
@@ -16,7 +17,8 @@ const REDEEM_CODE_PREFIX = 'redeem:';
  * @property {number} points
  * @property {boolean} accessOn
  * @property {number} lastCostAppliedAt Epoch ms at local midnight when cost was last applied
- * @property {string} lastCheckInDate YYYY-MM-DD for daily check-in limiter
+ * @property {string} lastCheckInDate YYYY-MM-DD for daily check-in limiter (legacy)
+ * @property {number|null} lastCheckInAt Epoch ms when user last checked in (for tz-aware checks)
  * @property {number|null} accessOffSince Epoch ms when entered OFF state (for 30 days purge)
  * @property {number} createdAt Epoch ms when the state was created
  */
@@ -35,6 +37,32 @@ function toDateString(ts) {
     const m = String(d.getMonth() + 1).padStart(2, '0');
     const da = String(d.getDate()).padStart(2, '0');
     return `${y}-${m}-${da}`;
+}
+
+/**
+ * Formats a date string (YYYY-MM-DD) using a client-provided timezone offset.
+ * Offset is minutes as returned by Date.getTimezoneOffset() on the client.
+ * Positive values mean locations west of UTC, negative east of UTC.
+ *
+ * Implementation detail: to compute the client local calendar day irrespective of server TZ,
+ * convert the UTC timestamp into the client's local clock by subtracting the offset in ms,
+ * then read the UTC parts.
+ * @param {number} ts Epoch milliseconds
+ * @param {number} offsetMinutes Client timezone offset in minutes
+ */
+function toDateStringWithOffset(ts, offsetMinutes) {
+    const t = ts - (Number.isFinite(offsetMinutes) ? offsetMinutes : 0) * 60 * 1000;
+    const d = new Date(t);
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const da = String(d.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${da}`;
+}
+
+function getClientOffset(req) {
+    const raw = /** @type {string|undefined} */ (req.headers['x-tz-offset']);
+    const parsed = raw != null ? parseInt(Array.isArray(raw) ? raw[0] : raw, 10) : 0;
+    return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function todayMidnight(ts = Date.now()) {
@@ -60,6 +88,7 @@ async function getOrInitState(handle) {
         accessOn: true,
         lastCostAppliedAt: todayMidnight(),
         lastCheckInDate: '',
+        lastCheckInAt: null,
         accessOffSince: null,
         createdAt: Date.now(),
     };
@@ -135,7 +164,16 @@ async function buildStatus(req) {
     const offDays = state.accessOn || !state.accessOffSince
         ? 0
         : Math.floor((todayMidnight() - todayMidnight(state.accessOffSince)) / MS_PER_DAY);
-    const canCheckInToday = state.lastCheckInDate !== toDateString(Date.now());
+    // 24-hour cooldown logic
+    let lastCheckInAt = state.lastCheckInAt;
+    if (lastCheckInAt == null && state.lastCheckInDate) {
+        // Best-effort migration from legacy date string: treat as midnight UTC
+        const parsed = Date.parse(`${state.lastCheckInDate}T00:00:00Z`);
+        if (!Number.isNaN(parsed)) lastCheckInAt = parsed;
+    }
+    const now = Date.now();
+    const canCheckInToday = lastCheckInAt == null || (now - lastCheckInAt) >= COOLDOWN_MS;
+    const nextCheckInAt = lastCheckInAt == null ? now : (lastCheckInAt + COOLDOWN_MS);
 
     const didPurge = beforeOffSince && !state.accessOn && (Date.now() - beforeOffSince) >= 30 * MS_PER_DAY;
 
@@ -146,6 +184,7 @@ async function buildStatus(req) {
         accessOn: state.accessOn,
         offDays,
         canCheckInToday,
+        nextCheckInAt,
         purged: !!didPurge,
     };
 }
@@ -171,14 +210,21 @@ router.post('/checkin', async (req, res) => {
         const handle = req.user.profile.handle;
         let state = await getOrInitState(handle);
         state = await applyDailyCosts(state);
-        const today = toDateString(Date.now());
-        if (state.lastCheckInDate === today) {
-            return res.status(400).json({ error: '今日已签到' });
+        // 24-hour cooldown enforcement
+        const now = Date.now();
+        let lastCheckInAt = state.lastCheckInAt;
+        if (lastCheckInAt == null && state.lastCheckInDate) {
+            const parsed = Date.parse(`${state.lastCheckInDate}T00:00:00Z`);
+            if (!Number.isNaN(parsed)) lastCheckInAt = parsed;
+        }
+        if (lastCheckInAt != null && (now - lastCheckInAt) < COOLDOWN_MS) {
+            return res.status(400).json({ error: '冷却中，尚未到下一次签到时间', nextCheckInAt: lastCheckInAt + COOLDOWN_MS });
         }
         state.points = Math.round((state.points + 5) * 2) / 2;
-        state.lastCheckInDate = today;
+        state.lastCheckInAt = now;
+        state.lastCheckInDate = toDateString(now);
         await storage.setItem(toAccountKey(handle), state);
-        return res.json({ points: state.points, lastCheckInDate: state.lastCheckInDate });
+        return res.json({ points: state.points, lastCheckInAt: state.lastCheckInAt, lastCheckInDate: state.lastCheckInDate, nextCheckInAt: now + COOLDOWN_MS });
     } catch (err) {
         console.error('account/checkin failed', err);
         return res.sendStatus(500);
@@ -261,6 +307,113 @@ router.post('/redeem', async (req, res) => {
     } catch (err) {
         console.error('account/redeem failed', err);
         return res.sendStatus(500);
+    }
+});
+
+// Leaderboard: top users by points, plus caller's rank
+router.get('/leaderboard', async (req, res) => {
+    try {
+        if (!req.user) return res.sendStatus(403);
+        const myHandle = req.user.profile.handle;
+
+        // Collect all users and their points
+        const userKeys = await storage.keys((x) => x.key.startsWith('user:'));
+        const rows = [];
+        for (const key of userKeys) {
+            const handle = key.replace('user:', '');
+            const userData = await storage.getItem(key);
+            // Skip explicitly disabled users if flag present
+            if (userData && userData.enabled === false) continue;
+            const state = await getOrInitState(handle);
+            rows.push({
+                handle,
+                name: userData?.name || handle,
+                points: state.points || 0,
+            });
+        }
+
+        // Sort by points desc, then by handle for stability
+        rows.sort((a, b) => {
+            if ((b.points || 0) !== (a.points || 0)) return (b.points || 0) - (a.points || 0);
+            return a.handle.localeCompare(b.handle);
+        });
+
+        const myIndex = rows.findIndex((r) => r.handle === myHandle);
+        const myRank = myIndex >= 0 ? (myIndex + 1) : null;
+
+        // Limit leaderboard size to top 50
+        const top = rows.slice(0, 50).map(({ name, handle, points }) => ({ name, handle, points }));
+
+        const myState = await getOrInitState(myHandle);
+        return res.json({
+            total: rows.length,
+            myRank,
+            myPoints: myState.points || 0,
+            leaderboard: top,
+        });
+    } catch (err) {
+        console.error('account/leaderboard failed', err);
+        return res.sendStatus(500);
+    }
+});
+
+// 修改密码
+router.post('/change-password', async (req, res) => {
+    if (!req.user) return res.sendStatus(401);
+    const handle = req.user.profile.handle;
+
+    try {
+        const { currentPassword, newPassword } = req.body || {};
+
+        // 验证输入
+        if (!currentPassword || typeof currentPassword !== 'string') {
+            return res.status(400).json({ error: '请输入当前密码' });
+        }
+
+        if (!newPassword || typeof newPassword !== 'string') {
+            return res.status(400).json({ error: '请输入新密码' });
+        }
+
+        if (newPassword.length < 6) {
+            return res.status(400).json({ error: '新密码至少需要 6 位字符' });
+        }
+
+        if (newPassword.length > 128) {
+            return res.status(400).json({ error: '新密码最多 128 位字符' });
+        }
+
+        // 获取用户数据
+        const userKey = toKey(handle);
+        const userData = await storage.getItem(userKey);
+
+        if (!userData) {
+            return res.status(404).json({ error: '用户不存在' });
+        }
+
+        // 验证当前密码
+        const currentPasswordHash = getPasswordHash(currentPassword, userData.salt);
+        if (currentPasswordHash !== userData.password) {
+            return res.status(401).json({ error: '当前密码错误' });
+        }
+
+        // 生成新密码的盐和哈希
+        const newSalt = getPasswordSalt();
+        const newPasswordHash = getPasswordHash(newPassword, newSalt);
+
+        // 更新密码
+        userData.password = newPasswordHash;
+        userData.salt = newSalt;
+        userData.passwordChangedAt = Date.now();
+
+        await storage.setItem(userKey, userData);
+
+        return res.json({
+            success: true,
+            message: '密码修改成功',
+        });
+    } catch (error) {
+        console.error('Change password error:', error);
+        return res.status(500).json({ error: '修改密码失败' });
     }
 });
 

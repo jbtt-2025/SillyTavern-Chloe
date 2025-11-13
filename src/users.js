@@ -919,8 +919,11 @@ export function requireLoginMiddleware(request, response, next) {
  * @param {import('express').Response} response Response object
  */
 export async function loginPageMiddleware(request, response) {
-    // 禁用原项目的登录页路由，统一跳转到独立的 OAuth 登录页
-    return response.redirect('/oauth.html');
+    try {
+        return response.sendFile('login.html', { root: path.join(serverDirectory, 'public') });
+    } catch {
+        return response.redirect('/oauth.html');
+    }
 }
 
 /**

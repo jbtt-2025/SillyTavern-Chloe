@@ -57,3 +57,4 @@ public/scripts/extensions/third-party
 /StartDev.bat
 yarn.lock
 *.code-workspace
+cookies.txt

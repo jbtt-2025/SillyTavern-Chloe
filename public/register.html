@@ -5,7 +5,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="robots" content="noindex, nofollow">
-    <title>密码登录 - 云酒馆</title>
+    <title>注册 - 云酒馆</title>
     <link rel="icon" href="favicon.ico" type="image/x-icon">
     <link rel="apple-touch-icon" href="apple-touch-icon.png">
     <link rel="icon" type="image/png" sizes="192x192" href="android-chrome-192x192.png">
@@ -30,7 +30,15 @@
         <!-- Glitch Effect Container -->
         <div class="glitch-container">
             <!-- Main Card -->
-            <div class="pixel-card login-card">
+            <div class="pixel-card register-card">
+                <!-- Logo Section -->
+                <div class="logo-container">
+                    <div class="pixel-border-box">
+                        <img id="logo" src="img/chloe-logo.jpg" alt="Chloe" class="pixel-logo" onerror="this.onerror=null;this.src='https://youke1.picui.cn/s1/2025/11/12/6913ee77e6f20.jpg'" />
+                    </div>
+                    <div class="scanline"></div>
+                </div>
+
                 <!-- Back Button -->
                 <div class="back-button-container">
                     <a href="/oauth.html" class="pixel-back-button">
@@ -41,40 +49,41 @@
                     </a>
                 </div>
 
-                <!-- Logo Section -->
-                <div class="logo-container">
-                    <div class="pixel-border-box">
-                        <img id="logo" src="img/chloe-logo.jpg" alt="Chloe" class="pixel-logo" onerror="this.onerror=null;this.src='https://youke1.picui.cn/s1/2025/11/12/6913ee77e6f20.jpg'" />
-                    </div>
-                    <div class="scanline"></div>
-                </div>
-
                 <!-- Title Section -->
                 <div class="title-section">
-                    <h1 class="pixel-title" data-text="账号密码登录">
-                        <span class="glitch-text">账号密码登录</span>
+                    <h1 class="pixel-title" data-text="邀请码注册">
+                        <span class="glitch-text">邀请码注册</span>
                     </h1>
                     <div class="subtitle-container">
-                        <span class="pixel-badge">LOGIN</span>
+                        <span class="pixel-badge">REGISTER</span>
                         <span class="pixel-divider">█</span>
                         <span class="status-indicator">
-                            <span class="blink">●</span> 账户访问
+                            <span class="blink">●</span> 创建新账户
                         </span>
                     </div>
                     <p class="pixel-description">
-                        ▸ 使用已注册的账号密码登录
+                        ▸ 使用邀请码注册并加入云酒馆
                     </p>
                 </div>
 
                 <!-- Form Section -->
                 <div class="buttons-section">
-                    <div class="login-form-container">
+                    <div class="register-form-container">
+                        <div class="form-field">
+                            <label class="field-label">
+                                <span class="label-icon">▸</span>
+                                <span class="label-text">邀请码</span>
+                            </label>
+                            <input id="inviteCode" type="text" class="pixel-input" placeholder="请输入邀请码" autocomplete="off">
+                        </div>
+
                         <div class="form-field">
                             <label class="field-label">
                                 <span class="label-icon">▸</span>
                                 <span class="label-text">用户名</span>
                             </label>
-                            <input id="loginHandle" type="text" class="pixel-input" placeholder="请输入用户名" autocomplete="username">
+                            <input id="regHandle" type="text" class="pixel-input" placeholder="字母开头，3-64位" autocomplete="username">
+                            <div class="field-hint">仅限字母、数字、下划线(_)和连字符(-)</div>
                         </div>
 
                         <div class="form-field">
@@ -82,26 +91,27 @@
                                 <span class="label-icon">▸</span>
                                 <span class="label-text">密码</span>
                             </label>
-                            <input id="loginPassword" type="password" class="pixel-input" placeholder="请输入密码" autocomplete="current-password">
+                            <input id="regPassword" type="password" class="pixel-input" placeholder="至少6位字符" autocomplete="new-password">
                         </div>
 
-                        <div id="loginError" class="error-message hidden"></div>
+                        <div class="form-field">
+                            <label class="field-label">
+                                <span class="label-icon">▸</span>
+                                <span class="label-text">确认密码</span>
+                            </label>
+                            <input id="regPassword2" type="password" class="pixel-input" placeholder="再次输入密码" autocomplete="new-password">
+                        </div>
 
-                        <button id="loginSubmit" class="pixel-button primary">
+                        <div id="regError" class="error-message hidden"></div>
+
+                        <button id="regSubmit" class="pixel-button primary">
                             <span class="button-corners"></span>
                             <span class="button-content">
                                 <span class="button-icon">▸</span>
-                                <span class="button-text">登录</span>
+                                <span class="button-text">创建账户并登录</span>
                             </span>
                             <span class="button-hover-effect"></span>
                         </button>
-
-                        <div class="login-footer">
-                            <a href="/register.html" class="pixel-link">
-                                <span class="link-icon">+</span>
-                                <span class="link-text">还没有账号？立即注册</span>
-                            </a>
-                        </div>
                     </div>
                 </div>
 
@@ -124,9 +134,9 @@
         </div>
     </div>
 
-    <!-- Custom styles for login page scrolling -->
+    <!-- Custom styles for register page scrolling -->
     <style>
-        /* Override the default no-scroll behavior for login page */
+        /* Override the default no-scroll behavior for register page */
         html,
         body {
             overflow-y: auto !important;
@@ -184,6 +194,6 @@
 
     <!-- Motion One (UMD) for animations -->
     <script src="https://cdn.jsdelivr.net/npm/motion@10.16.4/dist/motion.umd.js"></script>
-    <script type="module" src="/scripts/password-login.js"></script>
+    <script type="module" src="/scripts/register.js"></script>
 </body>
 </html>

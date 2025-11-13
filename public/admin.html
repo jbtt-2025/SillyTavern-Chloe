@@ -101,6 +101,10 @@
                     <span class="nav-icon">◈</span>
                     <span class="nav-text">兑换码管理</span>
                 </li>
+                <li class="nav-item" data-page="invite">
+                    <span class="nav-icon">✉</span>
+                    <span class="nav-text">邀请码管理</span>
+                </li>
             </ul>
 
             <div class="sidebar-footer">
@@ -321,6 +325,88 @@
                                 <div class="table-body" id="codesTableBody">
                                     <!-- Code rows will be inserted here -->
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Page: Invite Codes -->
+            <div class="page" id="page-invite">
+                <!-- Create Invite Codes Card -->
+                <div class="pixel-card">
+                    <div class="card-header">
+                        <span class="card-icon">+</span>
+                        <span class="card-title">创建邀请码</span>
+                        <div class="scanline"></div>
+                    </div>
+                    <div class="card-body">
+                        <div class="create-redeem-section">
+                            <div class="input-grid">
+                                <div class="input-group">
+                                    <label for="inviteCount" class="input-label">
+                                        <span class="label-icon">▸</span>
+                                        <span>生成数量</span>
+                                    </label>
+                                    <input
+                                        type="number"
+                                        id="inviteCount"
+                                        class="pixel-input"
+                                        placeholder="生成数量(1-200)"
+                                        min="1"
+                                        max="200"
+                                        value="1"
+                                    >
+                                </div>
+                                <div class="input-group">
+                                    <label for="inviteExpireDays" class="input-label">
+                                        <span class="label-icon">▸</span>
+                                        <span>有效期(天)</span>
+                                    </label>
+                                    <input
+                                        type="number"
+                                        id="inviteExpireDays"
+                                        class="pixel-input"
+                                        placeholder="留空=永久有效"
+                                        min="1"
+                                        max="365"
+                                    >
+                                </div>
+                            </div>
+                            <button id="createInviteBtn" class="pixel-button action-btn large">
+                                <span class="button-content">
+                                    <span class="button-icon">+</span>
+                                    <span class="button-text">批量创建邀请码</span>
+                                </span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Invite Codes List -->
+                <div class="pixel-card">
+                    <div class="card-header">
+                        <span class="card-icon">✉</span>
+                        <span class="card-title">邀请码列表</span>
+                        <div class="scanline"></div>
+                    </div>
+                    <div class="card-body">
+                        <div class="codes-table-container">
+                            <div class="loading-state" id="invitesLoading">
+                                <div class="loading-spinner">◆◆◆</div>
+                                <div class="loading-text">加载中...</div>
+                            </div>
+                            <div class="codes-table hidden" id="invitesTable">
+                                <div class="table-header">
+                                    <div class="table-cell">邀请码</div>
+                                    <div class="table-cell">状态</div>
+                                    <div class="table-cell">使用者</div>
+                                    <div class="table-cell">创建时间</div>
+                                    <div class="table-cell">过期时间</div>
+                                    <div class="table-cell">使用时间</div>
+                                    <div class="table-cell">操作</div>
+                                </div>
+                                <div class="table-body" id="invitesTableBody"></div>
                             </div>
                         </div>
                     </div>

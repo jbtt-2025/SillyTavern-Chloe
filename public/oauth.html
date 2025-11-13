@@ -58,6 +58,20 @@
 
                 <!-- Buttons Section -->
                 <div class="buttons-section">
+                    <!-- Optional Invite Code Input -->
+                    <div class="invite-code-section">
+                        <div class="invite-toggle">
+                            <label class="invite-checkbox">
+                                <input type="checkbox" id="hasInviteCode">
+                                <span class="checkbox-label">我有邀请码</span>
+                            </label>
+                        </div>
+                        <div class="invite-input-container hidden" id="inviteInputContainer">
+                            <input type="text" id="inviteCodeInput" class="pixel-input-small" placeholder="请输入邀请码">
+                            <div class="invite-hint">使用邀请码可在注册关闭时注册账号</div>
+                        </div>
+                    </div>
+
                     <a href="/auth/linuxdo" class="pixel-button" id="btn-linuxdo" data-platform="linuxdo">
                         <span class="button-corners"></span>
                         <span class="button-content">
@@ -72,6 +86,22 @@
                         <span class="button-content">
                             <span class="button-icon">▸</span>
                             <span class="button-text">使用 Discord 登录</span>
+                        </span>
+                        <span class="button-hover-effect"></span>
+                    </a>
+                    <a href="/register.html" class="pixel-button" id="btn-register">
+                        <span class="button-corners"></span>
+                        <span class="button-content">
+                            <span class="button-icon">▸</span>
+                            <span class="button-text">使用邀请码注册</span>
+                        </span>
+                        <span class="button-hover-effect"></span>
+                    </a>
+                    <a href="/login" class="pixel-button" id="btn-password-login">
+                        <span class="button-corners"></span>
+                        <span class="button-content">
+                            <span class="button-icon">▸</span>
+                            <span class="button-text">已有账号？密码登录</span>
                         </span>
                         <span class="button-hover-effect"></span>
                     </a>

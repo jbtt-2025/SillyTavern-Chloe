@@ -642,6 +642,24 @@ body {
     background: var(--pixel-white);
 }
 
+/* Check-in cooldown line */
+.checkin-cooldown {
+    margin-top: 8px;
+    text-align: center;
+    font-family: var(--pixel-font-alt);
+    font-size: 12px;
+}
+
+.checkin-cooldown .cooldown-label {
+    margin-right: 8px;
+    color: var(--pixel-dark-gray);
+}
+
+.checkin-cooldown .cooldown-value {
+    font-weight: 700;
+    color: var(--pixel-black);
+}
+
 .tip-item {
     display: flex;
     align-items: flex-start;
@@ -1212,6 +1230,18 @@ body {
 .points-cell {
     font-weight: bold;
     justify-content: flex-end;
+}
+
+/* Top 3 rank badges */
+.rank-badge {
+    margin-left: 8px;
+    font-family: var(--pixel-font);
+    font-size: 16px;
+    line-height: 1;
+}
+
+.table-row.current-user .rank-badge {
+    color: var(--pixel-white);
 }
 
 .leaderboard-tips {

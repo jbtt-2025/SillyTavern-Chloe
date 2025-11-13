@@ -304,7 +304,8 @@ async function preSetupTasks() {
 
     const directories = await getUserDirectoriesList();
     await checkForNewContent(directories);
-    await ensureThumbnailCache(directories);
+    // Defer heavy thumbnail generation until after the server starts listening
+    // to reduce startup downtime. Disk cache verification can happen now.
     await diskCache.verify(directories);
     migrateFlatSecrets(directories);
     cleanUploads();
@@ -416,6 +417,9 @@ async function postSetupTasks(result) {
 
     setupLogLevel();
     serverEvents.emit(EVENT_NAMES.SERVER_STARTED, { url: browserLaunchUrl });
+
+    // Note: Thumbnail cache prewarm is disabled by default to keep startup and API latency low.
+    // If needed, enable via a dedicated maintenance script or add a config flag and re-enable here.
 }
 
 /**

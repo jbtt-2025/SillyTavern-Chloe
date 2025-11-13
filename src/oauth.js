@@ -55,14 +55,64 @@ function sanitizeHandle(raw) {
         .slice(0, 64) || `user-${crypto.randomBytes(3).toString('hex')}`;
 }
 
-async function ensureUser(handle, name) {
+/**
+ * 验证邀请码是否有效
+ * @param {string} code - 邀请码
+ * @returns {Promise<boolean>} - 是否有效
+ */
+async function validateInviteCode(code) {
+    if (!code || typeof code !== 'string') {
+        return false;
+    }
+
+    const inviteKey = `invite:${code.toUpperCase()}`;
+    const invite = await storage.getItem(inviteKey);
+
+    if (!invite) {
+        return false;
+    }
+
+    if (invite.used) {
+        return false;
+    }
+
+    // 检查是否过期
+    if (invite.expiresAt && invite.expiresAt < Date.now()) {
+        return false;
+    }
+
+    return true;
+}
+
+/**
+ * 标记邀请码为已使用
+ * @param {string} code - 邀请码
+ * @param {string} usedBy - 使用者用户名
+ */
+async function markInviteCodeAsUsed(code, usedBy) {
+    const inviteKey = `invite:${code.toUpperCase()}`;
+    const invite = await storage.getItem(inviteKey);
+
+    if (invite) {
+        invite.used = true;
+        invite.usedBy = usedBy;
+        invite.usedAt = Date.now();
+        await storage.setItem(inviteKey, invite);
+    }
+}
+
+async function ensureUser(handle, name, inviteCode = null) {
     const key = toKey(handle);
     const existing = await storage.getItem(key);
 
     if (!existing) {
         // 检查是否允许注册
         const registrationAllowed = await isRegistrationEnabled();
-        if (!registrationAllowed) {
+
+        // 如果提供了有效的邀请码，则允许注册（即使注册开关关闭）
+        const hasValidInviteCode = inviteCode ? await validateInviteCode(inviteCode) : false;
+
+        if (!registrationAllowed && !hasValidInviteCode) {
             throw new Error('REGISTRATION_DISABLED');
         }
 
@@ -76,6 +126,11 @@ async function ensureUser(handle, name) {
             salt: '',
         };
         await storage.setItem(key, user);
+
+        // 如果使用了邀请码，标记为已使用
+        if (hasValidInviteCode) {
+            await markInviteCodeAsUsed(inviteCode, handle);
+        }
     }
 
     // Ensure directories exist
@@ -137,9 +192,13 @@ router.get('/auth/discord', async (req, res) => {
         }
 
         const state = createState();
+        // 从 query 参数获取邀请码（如果有）
+        const inviteCode = req.query.invite || '';
+
         if (req.session) {
             req.session.oauthState = state;
             req.session.oauthProvider = 'discord';
+            req.session.oauthInviteCode = inviteCode || null; // 保存邀请码到 session
             req.session.touch = Date.now();
         }
 
@@ -169,9 +228,13 @@ router.get('/auth/linuxdo', async (req, res) => {
         }
 
         const state = createState();
+        // 从 query 参数获取邀请码（如果有）
+        const inviteCode = req.query.invite || '';
+
         if (req.session) {
             req.session.oauthState = state;
             req.session.oauthProvider = 'linuxdo';
+            req.session.oauthInviteCode = inviteCode || null; // 保存邀请码到 session
             req.session.touch = Date.now();
         }
 
@@ -207,6 +270,8 @@ router.get('/oauth', async (req, res) => {
         }
 
         const redirectUri = getRedirectUri();
+        // 从 session 获取邀请码
+        const inviteCode = req.session?.oauthInviteCode || null;
 
         if (provider === 'discord') {
             const cfg = getDiscordConfig();
@@ -242,7 +307,7 @@ router.get('/oauth', async (req, res) => {
             const me = await meResp.json();
             const discordId = String(me.id || '').trim();
             const baseHandle = sanitizeHandle(`discord-${discordId || crypto.randomBytes(2).toString('hex')}`);
-            await ensureUser(baseHandle, me.global_name || me.username || 'Discord 用户');
+            await ensureUser(baseHandle, me.global_name || me.username || 'Discord 用户', inviteCode);
 
             if (req.session) {
                 req.session.handle = baseHandle;
@@ -250,6 +315,7 @@ router.get('/oauth', async (req, res) => {
                 // clear one-time oauth fields
                 req.session.oauthState = null;
                 req.session.oauthProvider = null;
+                req.session.oauthInviteCode = null;
             }
             await retireDefaultAdmin();
             await disableSecurityOverrideInConfig();
@@ -294,13 +360,14 @@ router.get('/oauth', async (req, res) => {
             const possibleName = me.username || me.name || me.preferred_username || 'LinuxDo 用户';
             const possibleId = String(me.id || me.sub || '').trim();
             const baseHandle = sanitizeHandle(`linuxdo-${possibleId || crypto.randomBytes(2).toString('hex')}`);
-            await ensureUser(baseHandle, possibleName);
+            await ensureUser(baseHandle, possibleName, inviteCode);
 
             if (req.session) {
                 req.session.handle = baseHandle;
                 req.session.touch = Date.now();
                 req.session.oauthState = null;
                 req.session.oauthProvider = null;
+                req.session.oauthInviteCode = null;
             }
             await retireDefaultAdmin();
             await disableSecurityOverrideInConfig();

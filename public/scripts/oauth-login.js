@@ -297,6 +297,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // Start animations immediately
     initializeAnimations();
 
+    // Setup invite code handlers and OAuth buttons
+    setupInviteCodeHandlers();
+    setupOAuthButtons();
+
     // Add special effects with staggered timing
     setTimeout(() => {
         animateVisitorCounter();
@@ -336,12 +340,106 @@ document.addEventListener('visibilitychange', () => {
     }
 });
 
-// OAuth button handlers (server handles actual redirects)
-document.getElementById('btn-linuxdo')?.addEventListener('click', (e) => {
-    console.log('▸ Initiating LinuxDo OAuth...');
-});
+// ═══════════════════════════════════════════════════════════════
+// INVITE CODE HANDLING
+// ═══════════════════════════════════════════════════════════════
 
-document.getElementById('btn-discord')?.addEventListener('click', (e) => {
-    console.log('▸ Initiating Discord OAuth...');
-});
+function setupInviteCodeHandlers() {
+    const hasInviteCheckbox = document.getElementById('hasInviteCode');
+    const inviteInputContainer = document.getElementById('inviteInputContainer');
+    const inviteCodeInput = document.getElementById('inviteCodeInput');
+
+    if (!hasInviteCheckbox || !inviteInputContainer) return;
+
+    // Toggle invite code input visibility
+    hasInviteCheckbox.addEventListener('change', () => {
+        if (hasInviteCheckbox.checked) {
+            inviteInputContainer.classList.remove('hidden');
+            if (animate) {
+                animate(inviteInputContainer, {
+                    opacity: [0, 1],
+                    y: [-10, 0]
+                }, { duration: 0.3 });
+            }
+            // Focus on input
+            setTimeout(() => inviteCodeInput?.focus(), 100);
+        } else {
+            if (animate) {
+                animate(inviteInputContainer, {
+                    opacity: [1, 0],
+                    y: [0, -10]
+                }, { duration: 0.3 }).finished.then(() => {
+                    inviteInputContainer.classList.add('hidden');
+                });
+            } else {
+                inviteInputContainer.classList.add('hidden');
+            }
+        }
+    });
+}
+
+// OAuth button handlers with invite code support
+function setupOAuthButtons() {
+    const btnLinuxdo = document.getElementById('btn-linuxdo');
+    const btnDiscord = document.getElementById('btn-discord');
+    const btnRegister = document.getElementById('btn-register');
+
+    function getInviteCode() {
+        const hasInviteCheckbox = document.getElementById('hasInviteCode');
+        const inviteCodeInput = document.getElementById('inviteCodeInput');
+
+        if (hasInviteCheckbox?.checked && inviteCodeInput?.value) {
+            return inviteCodeInput.value.trim();
+        }
+        return null;
+    }
+
+    function appendInviteCode(url, inviteCode) {
+        if (!inviteCode) return url;
+        const separator = url.includes('?') ? '&' : '?';
+        return `${url}${separator}invite=${encodeURIComponent(inviteCode)}`;
+    }
+
+    if (btnLinuxdo) {
+        btnLinuxdo.addEventListener('click', (e) => {
+            const inviteCode = getInviteCode();
+            if (inviteCode) {
+                e.preventDefault();
+                const originalHref = '/auth/linuxdo';
+                const newHref = appendInviteCode(originalHref, inviteCode);
+                console.log('▸ Initiating LinuxDo OAuth with invite code...');
+                window.location.href = newHref;
+            } else {
+                console.log('▸ Initiating LinuxDo OAuth...');
+            }
+        });
+    }
+
+    if (btnDiscord) {
+        btnDiscord.addEventListener('click', (e) => {
+            const inviteCode = getInviteCode();
+            if (inviteCode) {
+                e.preventDefault();
+                const originalHref = '/auth/discord';
+                const newHref = appendInviteCode(originalHref, inviteCode);
+                console.log('▸ Initiating Discord OAuth with invite code...');
+                window.location.href = newHref;
+            } else {
+                console.log('▸ Initiating Discord OAuth...');
+            }
+        });
+    }
+
+    if (btnRegister) {
+        btnRegister.addEventListener('click', (e) => {
+            const inviteCode = getInviteCode();
+            if (inviteCode) {
+                e.preventDefault();
+                const newHref = `/register.html?invite=${encodeURIComponent(inviteCode)}`;
+                console.log('▸ Navigating to registration with invite code...');
+                window.location.href = newHref;
+            }
+        });
+    }
+}
 

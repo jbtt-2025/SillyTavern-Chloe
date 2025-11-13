@@ -612,6 +612,121 @@ async function deleteRedeemCode(code) {
     }
 }
 
+// ──────────────────────────────────────────────────────────────
+// INVITE CODES
+// ──────────────────────────────────────────────────────────────
+
+async function loadInviteCodes() {
+    const loading = qs('#invitesLoading');
+    const table = qs('#invitesTable');
+    const tbody = qs('#invitesTableBody');
+
+    try {
+        loading.classList.remove('hidden');
+        table.classList.add('hidden');
+
+        const data = await getJSON('/api/admin/invite-codes');
+        const codes = data.codes || [];
+
+        tbody.innerHTML = '';
+        if (codes.length === 0) {
+            tbody.innerHTML = '<div class="table-row"><div class="table-cell" style="grid-column: 1 / -1; justify-content: center;">暂无邀请码</div></div>';
+        } else {
+            codes.forEach(code => {
+                const row = document.createElement('div');
+                row.className = 'table-row';
+
+                // 检查是否过期
+                const isExpired = code.expiresAt && code.expiresAt < Date.now();
+                const statusClass = code.used ? 'used' : (isExpired ? 'disabled' : 'unused');
+                const statusText = code.used ? '已使用' : (isExpired ? '已过期' : '未使用');
+
+                row.innerHTML = `
+                    <div class="table-cell" data-label="邀请码">${escapeHtml(code.code)}</div>
+                    <div class="table-cell" data-label="状态">
+                        <span class="status-badge ${statusClass}">${statusText}</span>
+                    </div>
+                    <div class="table-cell" data-label="使用者">${code.usedBy ? escapeHtml(code.usedBy) : '-'}</div>
+                    <div class="table-cell" data-label="创建时间">${formatDate(code.createdAt)}</div>
+                    <div class="table-cell" data-label="过期时间">
+                        ${code.expiresAt ? `<span class="${isExpired ? 'expired-text' : ''}">${formatDate(code.expiresAt)}</span>` : '<span style="color: #00ff00;">永久</span>'}
+                    </div>
+                    <div class="table-cell" data-label="使用时间">${code.usedAt ? formatDate(code.usedAt) : '-'}</div>
+                    <div class="table-cell" data-label="操作">
+                        ${!code.used ? `
+                            <button class="pixel-button action-btn-small danger" data-action="delete-invite" data-code="${escapeHtml(code.code)}">
+                                <span class="button-content"><span class="button-text">删除</span></span>
+                            </button>
+                        ` : '-'}
+                    </div>`;
+                tbody.appendChild(row);
+            });
+
+            tbody.querySelectorAll('[data-action="delete-invite"]').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    const code = e.currentTarget.dataset.code;
+                    const confirmed = await showConfirmDialog('确认删除', `确定要删除邀请码 ${code} 吗？`);
+                    if (confirmed) await deleteInviteCode(code);
+                });
+            });
+        }
+
+        loading.classList.add('hidden');
+        table.classList.remove('hidden');
+    } catch (error) {
+        console.error('Failed to load invite codes:', error);
+        showToast('error', '加载失败', '无法加载邀请码列表');
+        loading.classList.add('hidden');
+    }
+}
+
+async function createInviteCodes() {
+    const countInput = qs('#inviteCount');
+    const expireDaysInput = qs('#inviteExpireDays');
+    const btn = qs('#createInviteBtn');
+    const count = parseInt(countInput.value);
+    if (!count || count <= 0 || count > 200) {
+        showToast('error', '输入错误', '生成数量必须在1-200之间');
+        return;
+    }
+
+    // 获取过期天数，留空则为永久有效
+    const expireDays = expireDaysInput.value ? parseInt(expireDaysInput.value) : null;
+    if (expireDays !== null && (expireDays <= 0 || expireDays > 365)) {
+        showToast('error', '输入错误', '有效期必须在1-365天之间');
+        return;
+    }
+
+    try {
+        btn.disabled = true;
+        const payload = { count };
+        if (expireDays !== null) {
+            payload.expiresInDays = expireDays;
+        }
+        const result = await postJSON('/api/admin/invite-codes', payload);
+        showToast('success', '创建成功', result.message || `成功创建 ${count} 个邀请码`);
+        countInput.value = '1';
+        expireDaysInput.value = '';
+        await loadInviteCodes();
+        await loadDashboard();
+    } catch (error) {
+        showToast('error', '创建失败', error.error || '创建邀请码失败');
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function deleteInviteCode(code) {
+    try {
+        const result = await deleteJSON(`/api/admin/invite-codes/${code}`);
+        showToast('success', '删除成功', result.message || '邀请码已删除');
+        await loadInviteCodes();
+        await loadDashboard();
+    } catch (error) {
+        showToast('error', '删除失败', error.error || '删除邀请码失败');
+    }
+}
+
 // ═══════════════════════════════════════════════════════════════
 // PAGE NAVIGATION
 // ═══════════════════════════════════════════════════════════════
@@ -620,6 +735,7 @@ const PAGE_TITLES = {
     dashboard: '系统总览',
     users: '用户管理',
     redeem: '兑换码管理',
+    invite: '邀请码管理',
 };
 
 function switchPage(pageName) {
@@ -655,6 +771,8 @@ function switchPage(pageName) {
         loadUsers();
     } else if (pageName === 'redeem') {
         loadRedeemCodes();
+    } else if (pageName === 'invite') {
+        loadInviteCodes();
     } else if (pageName === 'dashboard') {
         loadDashboard();
     }
@@ -712,6 +830,13 @@ function setupNavigationHandlers() {
     if (createRedeemBtn) {
         createRedeemBtn.removeEventListener('click', createRedeemCodes);
         createRedeemBtn.addEventListener('click', createRedeemCodes);
+    }
+
+    // Create invite codes
+    const createInviteBtn = qs('#createInviteBtn');
+    if (createInviteBtn) {
+        createInviteBtn.removeEventListener('click', createInviteCodes);
+        createInviteBtn.addEventListener('click', createInviteCodes);
     }
 
     // Registration toggle

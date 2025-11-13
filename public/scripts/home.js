@@ -6,6 +6,8 @@
 let CSRF = 'disabled';
 let currentPage = 'dashboard';
 let userStatus = null;
+let checkinCountdownTimer = null;
+let leaderboardTimer = null;
 
 // ═══════════════════════════════════════════════════════════════
 // API FUNCTIONS
@@ -22,15 +24,16 @@ async function fetchCsrf() {
 }
 
 async function getStatus() {
-    const res = await fetch('/api/account/status', {
-        headers: CSRF === 'disabled' ? {} : { 'x-csrf-token': CSRF }
-    });
+    const tzOffset = new Date().getTimezoneOffset();
+    const baseHeaders = { 'x-tz-offset': String(tzOffset) };
+    const headers = CSRF === 'disabled' ? baseHeaders : { ...baseHeaders, 'x-csrf-token': CSRF };
+    const res = await fetch('/api/account/status', { headers });
     if (!res.ok) throw new Error('status failed');
     return res.json();
 }
 
 async function postJSON(url, body) {
-    const headers = { 'Content-Type': 'application/json' };
+    const headers = { 'Content-Type': 'application/json', 'x-tz-offset': String(new Date().getTimezoneOffset()) };
     if (CSRF && CSRF !== 'disabled') headers['x-csrf-token'] = CSRF;
     const res = await fetch(url, {
         method: 'POST',
@@ -116,6 +119,13 @@ function navigateToPage(pageName) {
     // Load leaderboard data when navigating to leaderboard page
     if (pageName === 'leaderboard') {
         loadLeaderboard();
+        if (leaderboardTimer) clearInterval(leaderboardTimer);
+        leaderboardTimer = setInterval(loadLeaderboard, 15000);
+    } else {
+        if (leaderboardTimer) {
+            clearInterval(leaderboardTimer);
+            leaderboardTimer = null;
+        }
     }
 }
 
@@ -224,6 +234,44 @@ function applyStatus(s) {
                 btnText.textContent = '每日签到 +5 积分';
             } else {
                 btnText.textContent = '已签到';
+            }
+        }
+    }
+
+    // Check-in cooldown countdown
+    const cooldownWrap = qs('checkinCooldownWrap');
+    const cooldownEl = qs('checkinCooldown');
+    if (cooldownWrap && cooldownEl) {
+        const nextAt = s.nextCheckInAt || 0;
+        const now = Date.now();
+        const remaining = Math.max(0, Math.floor((nextAt - now) / 1000));
+
+        const updateCooldown = () => {
+            const now2 = Date.now();
+            const remain = Math.max(0, Math.floor(((s.nextCheckInAt || 0) - now2) / 1000));
+            const h = Math.floor(remain / 3600);
+            const m = Math.floor((remain % 3600) / 60);
+            const sec = remain % 60;
+            const pad = (n) => String(n).padStart(2, '0');
+            cooldownEl.textContent = `${pad(h)}:${pad(m)}:${pad(sec)}`;
+            if (remain <= 0 && checkinCountdownTimer) {
+                clearInterval(checkinCountdownTimer);
+                checkinCountdownTimer = null;
+                // Refresh status to re-enable the button promptly
+                getStatus().then(applyStatus).catch(() => {});
+            }
+        };
+
+        if (!s.canCheckInToday && remaining > 0) {
+            cooldownWrap.classList.remove('hidden');
+            updateCooldown();
+            if (checkinCountdownTimer) clearInterval(checkinCountdownTimer);
+            checkinCountdownTimer = setInterval(updateCooldown, 1000);
+        } else {
+            cooldownWrap.classList.add('hidden');
+            if (checkinCountdownTimer) {
+                clearInterval(checkinCountdownTimer);
+                checkinCountdownTimer = null;
             }
         }
     }
@@ -498,50 +546,40 @@ async function loadLeaderboard() {
     if (tableEl) tableEl.classList.add('hidden');
 
     try {
-        // TODO: Replace with actual API endpoint
-        // const data = await fetch('/api/account/leaderboard').then(r => r.json());
-
-        // Mock data for demonstration
-        await new Promise(resolve => setTimeout(resolve, 800));
-
-        const mockData = {
-            total: 156,
-            myRank: 23,
-            myPoints: userStatus ? userStatus.points : 0,
-            leaderboard: generateMockLeaderboard()
-        };
+        const headers = CSRF === 'disabled' ? {} : { 'x-csrf-token': CSRF };
+        const data = await fetch('/api/account/leaderboard', { headers }).then(r => {
+            if (!r.ok) throw new Error('leaderboard failed');
+            return r.json();
+        });
 
         // Update stats
         const totalUsersEl = qs('totalUsers');
         const myRankEl = qs('myRank');
         const myPointsEl = qs('myPoints');
 
-        if (totalUsersEl) totalUsersEl.textContent = mockData.total;
-        if (myRankEl) myRankEl.textContent = `#${mockData.myRank}`;
-        if (myPointsEl) myPointsEl.textContent = mockData.myPoints;
+        if (totalUsersEl) totalUsersEl.textContent = data.total;
+        if (myRankEl) myRankEl.textContent = data.myRank ? `#${data.myRank}` : '-';
+        if (myPointsEl) myPointsEl.textContent = data.myPoints;
 
         // Render leaderboard table
         if (bodyEl) {
             bodyEl.innerHTML = '';
-            mockData.leaderboard.forEach((entry, index) => {
+            data.leaderboard.forEach((entry, index) => {
                 const row = document.createElement('div');
                 row.className = 'table-row';
 
                 // Highlight current user
-                if (userStatus && entry.name === userStatus.name) {
+                if (userStatus && (entry.name === userStatus.name || entry.handle === (userStatus.handle || ''))) {
                     row.classList.add('current-user');
                 }
 
-                // Special styling for top 3
-                if (index < 3) {
-                    row.classList.add(`rank-${index + 1}`);
-                }
-
-                const rankText = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `#${index + 1}`;
+                // Uniform rank display; add badges for top 3
+                const rankText = `#${index + 1}`;
+                const badge = index === 0 ? '屌！' : index === 1 ? '牛逼！' : index === 2 ? '帅！' : '';
 
                 row.innerHTML = `
                     <div class="table-cell rank-cell">${rankText}</div>
-                    <div class="table-cell name-cell">${entry.name}</div>
+                    <div class="table-cell name-cell">${entry.name}${badge ? ` <span class="rank-badge rank-badge-${index + 1}">${badge}</span>` : ''}</div>
                     <div class="table-cell points-cell">${entry.points}</div>
                 `;
 
@@ -560,26 +598,7 @@ async function loadLeaderboard() {
     }
 }
 
-function generateMockLeaderboard() {
-    const names = [
-        'Alice', 'Bob', 'Charlie', 'Diana', 'Eve', 'Frank', 'Grace', 'Henry',
-        'Iris', 'Jack', 'Kate', 'Leo', 'Mia', 'Nathan', 'Olivia', 'Peter',
-        'Quinn', 'Rose', 'Sam', 'Tina'
-    ];
-
-    const leaderboard = [];
-    for (let i = 0; i < 20; i++) {
-        leaderboard.push({
-            name: names[i],
-            points: Math.floor(Math.random() * 100) + (20 - i) * 10
-        });
-    }
-
-    // Sort by points descending
-    leaderboard.sort((a, b) => b.points - a.points);
-
-    return leaderboard;
-}
+// removed mock leaderboard
 
 // ═══════════════════════════════════════════════════════════════
 // REDEEM CODE FUNCTIONALITY
@@ -609,8 +628,9 @@ async function handleRedeem() {
             resultDiv.className = 'result-message success';
             resultDiv.classList.remove('hidden');
 
-            // Refresh account status to update points display
-            await loadAccountStatus();
+            // Optimistically update status without extra round-trip
+            const updated = { ...(userStatus || {}), points: result.points };
+            applyStatus(updated);
 
             // Clear input
             codeInput.value = '';
@@ -635,6 +655,101 @@ async function handleRedeem() {
 // ═══════════════════════════════════════════════════════════════
 // EVENT HANDLERS
 // ═══════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════
+// PASSWORD CHANGE HANDLERS
+// ═══════════════════════════════════════════════════════════════
+
+function showChangePasswordDialog() {
+    const dialog = qs('changePasswordDialog');
+    if (dialog) {
+        // Clear previous values
+        const currentPassword = qs('currentPassword');
+        const newPassword = qs('newPassword');
+        const confirmNewPassword = qs('confirmNewPassword');
+        const passwordError = qs('passwordError');
+
+        if (currentPassword) currentPassword.value = '';
+        if (newPassword) newPassword.value = '';
+        if (confirmNewPassword) confirmNewPassword.value = '';
+        if (passwordError) {
+            passwordError.textContent = '';
+            passwordError.classList.add('hidden');
+        }
+
+        dialog.classList.remove('hidden');
+    }
+}
+
+function hideChangePasswordDialog() {
+    const dialog = qs('changePasswordDialog');
+    if (dialog) {
+        dialog.classList.add('hidden');
+    }
+}
+
+function showPasswordError(msg) {
+    const el = qs('passwordError');
+    if (!el) return;
+    el.textContent = msg || '';
+    if (msg) {
+        el.classList.remove('hidden');
+    } else {
+        el.classList.add('hidden');
+    }
+}
+
+async function handleChangePassword() {
+    const currentPassword = qs('currentPassword')?.value || '';
+    const newPassword = qs('newPassword')?.value || '';
+    const confirmNewPassword = qs('confirmNewPassword')?.value || '';
+
+    // 验证输入
+    if (!currentPassword) {
+        return showPasswordError('请输入当前密码');
+    }
+
+    if (!newPassword) {
+        return showPasswordError('请输入新密码');
+    }
+
+    if (newPassword.length < 6) {
+        return showPasswordError('新密码至少需要 6 位字符');
+    }
+
+    if (newPassword.length > 128) {
+        return showPasswordError('新密码最多 128 位字符');
+    }
+
+    if (newPassword !== confirmNewPassword) {
+        return showPasswordError('两次输入的新密码不一致');
+    }
+
+    if (currentPassword === newPassword) {
+        return showPasswordError('新密码不能与当前密码相同');
+    }
+
+    try {
+        showPasswordError('');
+        const confirmBtn = qs('passwordConfirm');
+        if (confirmBtn) confirmBtn.disabled = true;
+
+        const result = await postJSON('/api/account/change-password', {
+            currentPassword,
+            newPassword,
+        });
+
+        // 成功后关闭对话框并显示提示
+        hideChangePasswordDialog();
+        showToast(result.message || '密码修改成功', 'success', 3000);
+
+    } catch (e) {
+        showPasswordError(e.error || e.message || '修改密码失败，请稍后重试');
+    } finally {
+        const confirmBtn = qs('passwordConfirm');
+        if (confirmBtn) confirmBtn.disabled = false;
+    }
+}
 
 async function setupEventHandlers() {
     // Alert close button
@@ -691,14 +806,20 @@ async function setupEventHandlers() {
     if (checkinBtn) {
         checkinBtn.addEventListener('click', async () => {
             try {
-                await postJSON('/api/account/checkin');
-                const s = await getStatus();
-                applyStatus(s);
+                const result = await postJSON('/api/account/checkin');
+                // Optimistically update local status to avoid extra round-trip
+                const updated = {
+                    ...(userStatus || {}),
+                    points: result.points,
+                    canCheckInToday: false,
+                    nextCheckInAt: result.nextCheckInAt,
+                };
+                applyStatus(updated);
 
                 // Animate points counter
                 const pointsEl = qs('pointsCheckin');
                 if (pointsEl && window.Motion && window.Motion.animate) {
-                    animateCounter('#pointsCheckin', s.points);
+                    animateCounter('#pointsCheckin', result.points);
                 }
 
                 // Button text will be automatically updated to "已签到" by applyStatus
@@ -900,6 +1021,24 @@ async function setupEventHandlers() {
             url.searchParams.set('noauto', 'true');
             location.href = url.toString();
         });
+    }
+
+    // Change password button
+    const changePasswordBtn = qs('changePasswordBtn');
+    if (changePasswordBtn) {
+        changePasswordBtn.addEventListener('click', showChangePasswordDialog);
+    }
+
+    // Change password dialog handlers
+    const passwordConfirm = qs('passwordConfirm');
+    const passwordCancel = qs('passwordCancel');
+
+    if (passwordConfirm) {
+        passwordConfirm.addEventListener('click', handleChangePassword);
+    }
+
+    if (passwordCancel) {
+        passwordCancel.addEventListener('click', hideChangePasswordDialog);
     }
 
     // Periodic refresh
