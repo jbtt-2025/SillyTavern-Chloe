@@ -370,6 +370,69 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════
+   GITHUB FOOTER LINK
+   ═══════════════════════════════════════════════════════════════ */
+
+.github-footer {
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 2px dashed var(--pixel-light-gray);
+}
+
+.github-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    background: var(--pixel-white);
+    border: 3px solid var(--pixel-black);
+    box-shadow: 4px 4px 0 var(--pixel-black);
+    font-family: var(--pixel-font-alt);
+    font-size: 11px;
+    color: var(--pixel-black);
+    text-decoration: none;
+    transition: all 0.2s ease;
+    letter-spacing: 0.5px;
+}
+
+.github-link:hover {
+    background: var(--pixel-black);
+    color: var(--pixel-white);
+    transform: translate(-2px, -2px);
+    box-shadow: 6px 6px 0 var(--pixel-black);
+}
+
+.github-link:hover .github-icon {
+    animation: rotate-icon 0.6s ease-in-out;
+}
+
+.github-icon {
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+    display: block;
+}
+
+.github-text {
+    flex: 1;
+    white-space: nowrap;
+}
+
+.github-arrow {
+    font-size: 14px;
+    transition: transform 0.2s ease;
+}
+
+.github-link:hover .github-arrow {
+    transform: translateX(4px);
+}
+
+@keyframes rotate-icon {
+    0%, 100% { transform: rotate(0deg); }
+    50% { transform: rotate(360deg); }
+}
+
+/* ═══════════════════════════════════════════════════════════════
    RESPONSIVE ADJUSTMENTS
    ═══════════════════════════════════════════════════════════════ */
 
